@@ -8,6 +8,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var volumeLsQuiet bool
+
 func extractName(url string) string {
 	for i := len(url) - 1; i >= 0; i-- {
 		if url[i] == '/' {
@@ -27,6 +29,13 @@ var volumeLsCmd = &cobra.Command{
 			return err
 		}
 
+		if volumeLsQuiet {
+			for _, u := range urls {
+				fmt.Println(extractName(u))
+			}
+			return nil
+		}
+
 		fmt.Println("DRIVER    VOLUME NAME")
 		for _, u := range urls {
 			name := extractName(u)
@@ -34,4 +43,8 @@ var volumeLsCmd = &cobra.Command{
 		}
 		return nil
 	},
+}
+
+func init() {
+	volumeLsCmd.Flags().BoolVarP(&volumeLsQuiet, "quiet", "q", false, "Only display volume names")
 }
