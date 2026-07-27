@@ -15,7 +15,7 @@ import (
 )
 
 const (
-	Version    = "0.1.0"
+	Version    = "0.1.1"
 	APIVersion = "1.0"
 
 	DefaultUnixSocket = "/var/lib/incus/unix.socket"
