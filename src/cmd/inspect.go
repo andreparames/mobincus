@@ -330,3 +330,7 @@ func buildInspectResult(inst *incus.Instance, state *incus.InstanceState) map[st
 		"Mounts":          mounts,
 	}
 }
+
+func init() {
+	inspectCmd.Flags().StringVarP(&inspectType, "type", "", "", "Return JSON for specified type")
+}
