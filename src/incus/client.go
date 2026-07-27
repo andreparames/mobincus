@@ -384,6 +384,12 @@ func (c *Client) ListContainers() ([]DockerContainer, error) {
 		if err != nil {
 			return nil, err
 		}
+		cfg := make(map[string]string)
+		for k, v := range detail.Config {
+			if strings.HasPrefix(k, "user.") {
+				cfg[k] = v
+			}
+		}
 		containers = append(containers, DockerContainer{
 			ID:        detail.Name,
 			Names:     []string{detail.Name},
@@ -392,6 +398,7 @@ func (c *Client) ListContainers() ([]DockerContainer, error) {
 			CreatedAt: detail.CreatedAt,
 			Ports:     "",
 			Command:   "",
+			Config:    cfg,
 		})
 	}
 

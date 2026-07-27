@@ -131,6 +131,9 @@ mobincus/
 - [x] `docker wait` command
 - [x] `docker cp` implementation (file API, recursive dirs, tar stdout, follow-link)
 - [x] `version --format` with Go template `json` function support
+- [x] `--label` flag on `run` and `create` (maps to `user.*` config keys on Instance)
+- [x] `docker ps -q` (quiet, IDs only)
+- [x] `docker ps --filter label=key=value` (client-side filtering by config)
 
 ## Next steps (in rough order)
 

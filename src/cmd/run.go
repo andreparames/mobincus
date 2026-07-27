@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 	"time"
 
 	"mobincus/incus"
@@ -16,6 +17,7 @@ type runOptions struct {
 	rm          bool
 	interactive bool
 	detach      bool
+	labels      []string
 }
 
 var runOpts runOptions
@@ -71,9 +73,21 @@ var runCmd = &cobra.Command{
 
 		name := generateName()
 
+			labels := make(map[string]string)
+		for _, l := range runOpts.labels {
+			parts := strings.SplitN(l, "=", 2)
+			key := "user." + parts[0]
+			if len(parts) > 1 {
+				labels[key] = parts[1]
+			} else {
+				labels[key] = ""
+			}
+		}
+
 		_, err = client.CreateInstance(incus.InstanceCreateRequest{
 			Name:       name,
 			Source:     source,
+			Config:     labels,
 			Ephemeral:  false,
 			Profiles:   []string{"default"},
 		})
@@ -178,6 +192,7 @@ func init() {
 	runCmd.Flags().BoolVarP(&runOpts.rm, "rm", "", false, "Automatically remove the container when it exits")
 	runCmd.Flags().BoolVarP(&runOpts.interactive, "interactive", "i", false, "Keep STDIN open even if not attached")
 	runCmd.Flags().BoolVarP(&runOpts.detach, "detach", "d", false, "Run container in background and print container ID")
+	runCmd.Flags().StringArrayVarP(&runOpts.labels, "label", "l", nil, "Set metadata on container")
 	runCmd.Flags().SetInterspersed(false)
 	rootCmd.AddCommand(runCmd)
 }
