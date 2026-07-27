@@ -1,0 +1,50 @@
+name: Release
+
+on:
+  workflow_dispatch:
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: src/go.mod
+
+      - name: Bump patch version
+        id: version
+        run: |
+          CURRENT=$(sed -n 's/^\s*Version\s*=\s*"\(.*\)".*/\1/p' src/incus/client.go)
+          IFS=. read -r MAJOR MINOR PATCH <<< "$CURRENT"
+          NEW="$MAJOR.$MINOR.$((PATCH + 1))"
+          sed -i "s/Version = \"$CURRENT\"/Version = \"$NEW\"/" src/incus/client.go
+          echo "new=$NEW" >> "$GITHUB_OUTPUT"
+
+      - name: Commit and tag
+        run: |
+          git config user.name "mobincus-release-bot"
+          git config user.email "<>"
+          git add src/incus/client.go
+          git commit -m "Bump version to ${{ steps.version.outputs.new }}"
+          git tag "v${{ steps.version.outputs.new }}"
+          git push
+          git push --tags
+
+      - name: Build
+        run: |
+          cd src
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o mobincus-linux-amd64 .
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.version.outputs.new }}
+          files: src/mobincus-linux-amd64
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
