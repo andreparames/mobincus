@@ -7,6 +7,9 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/url"
+	"os"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -393,6 +396,106 @@ func (c *Client) ListContainers() ([]DockerContainer, error) {
 	}
 
 	return containers, nil
+}
+
+type FileInfo struct {
+	Type     string // "file" or "directory"
+	Size     int64
+	Mode     os.FileMode
+	UID      int
+	GID      int
+	Modified time.Time
+}
+
+func (c *Client) FileStat(name, path string) (*FileInfo, error) {
+	req, err := http.NewRequest("HEAD", fmt.Sprintf("%s/instances/%s/files?path=%s", c.BaseURL, name, url.QueryEscape(path)), nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("file stat error: HTTP %d", resp.StatusCode)
+	}
+
+	info := &FileInfo{
+		Type: resp.Header.Get("X-Incus-Type"),
+	}
+	info.Size, _ = strconv.ParseInt(resp.Header.Get("Content-Length"), 10, 64)
+	modeStr := resp.Header.Get("X-Incus-Mode")
+	if modeStr != "" {
+		if m, err := strconv.ParseInt(modeStr, 8, 32); err == nil {
+			info.Mode = os.FileMode(m)
+		}
+	}
+	info.UID, _ = strconv.Atoi(resp.Header.Get("X-Incus-Uid"))
+	info.GID, _ = strconv.Atoi(resp.Header.Get("X-Incus-Gid"))
+	modStr := resp.Header.Get("X-Incus-Modified")
+	if modStr != "" {
+		info.Modified, _ = time.Parse("2006-01-02 15:04:05 -0700 MST", modStr)
+	}
+	return info, nil
+}
+
+func (c *Client) FileGet(name, path string) (io.ReadCloser, *FileInfo, error) {
+	info, err := c.FileStat(name, path)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	req, err := http.NewRequest("GET", fmt.Sprintf("%s/instances/%s/files?path=%s", c.BaseURL, name, url.QueryEscape(path)), nil)
+	if err != nil {
+		return nil, nil, err
+	}
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, nil, err
+	}
+	if resp.StatusCode != http.StatusOK {
+		resp.Body.Close()
+		return nil, nil, fmt.Errorf("file get error: HTTP %d", resp.StatusCode)
+	}
+	return resp.Body, info, nil
+}
+
+type fileListResponse struct {
+	Metadata []string `json:"metadata"`
+}
+
+func (c *Client) FileList(name, path string) ([]string, error) {
+	raw, err := c.get("/instances/" + name + "/files?path=" + url.QueryEscape(path))
+	if err != nil {
+		return nil, err
+	}
+	var list []string
+	if err := json.Unmarshal(raw, &list); err != nil {
+		return nil, fmt.Errorf("parsing file list: %w", err)
+	}
+	return list, nil
+}
+
+func (c *Client) FilePut(name, path, fileType string, mode os.FileMode, content io.Reader) error {
+	u := fmt.Sprintf("%s/instances/%s/files?path=%s", c.BaseURL, name, url.QueryEscape(path))
+	req, err := http.NewRequest("POST", u, content)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("X-Incus-Type", fileType)
+	req.Header.Set("X-Incus-Mode", fmt.Sprintf("%04o", mode))
+	req.Header.Set("Content-Type", "application/octet-stream")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("file put error: HTTP %d", resp.StatusCode)
+	}
+	return nil
 }
 
 func (c *Client) SetConfig(name, key, value string) error {

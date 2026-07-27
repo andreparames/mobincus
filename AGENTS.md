@@ -125,12 +125,16 @@ mobincus/
 - [x] `docker rm` command (with `-f` force)
 - [x] `docker wait` command
 - [x] `docker run -d` detached mode
+- [x] `docker create` command
+- [x] `docker start` command
+- [x] `docker rm` command (with `-f` force)
+- [x] `docker wait` command
+- [x] `docker cp` implementation (file API, recursive dirs, tar stdout, follow-link)
 
 ## Next steps (in rough order)
 
 - [ ] `--version` / `-v` flags on root command
 - [ ] `-H` / `--host` / `DOCKER_HOST` flag support
 - [ ] `docker container ls` — alias for `docker ps`
-- [ ] `docker cp` implementation
 - [ ] `docker inspect` JSON output for real containers
 - [ ] Run more e2e tests: `TestTCPSchemeUsesHTTPProxyEnv`, `TestCliPluginsVersion`, `TestGlobalArgsOnlyParsedOnce`
