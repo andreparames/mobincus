@@ -1,0 +1,393 @@
+package incus
+
+import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net"
+	"net/http"
+	"strings"
+	"time"
+)
+
+const (
+	Version    = "0.1.0"
+	APIVersion = "1.0"
+
+	DefaultUnixSocket = "/var/lib/incus/unix.socket"
+	DefaultBaseURL    = "http://localhost/1.0"
+)
+
+type Client struct {
+	BaseURL    string
+	httpClient *http.Client
+}
+
+func NewClient() *Client {
+	return &Client{
+		BaseURL: DefaultBaseURL,
+		httpClient: &http.Client{
+			Timeout: 30 * time.Second,
+			Transport: &http.Transport{
+				Dial: func(_, _ string) (net.Conn, error) {
+					return net.DialTimeout("unix", DefaultUnixSocket, 5*time.Second)
+				},
+			},
+		},
+	}
+}
+
+type apiResponse struct {
+	Type       string          `json:"type"`
+	StatusCode int             `json:"status_code"`
+	Status     string          `json:"status"`
+	Error      string          `json:"error"`
+	Operation  string          `json:"operation"`
+	Metadata   json.RawMessage `json:"metadata"`
+}
+
+func (c *Client) request(method, path string, body interface{}) (*apiResponse, error) {
+	url := fmt.Sprintf("%s%s", c.BaseURL, path)
+
+	var reqBody io.Reader
+	if body != nil {
+		data, err := json.Marshal(body)
+		if err != nil {
+			return nil, fmt.Errorf("marshaling request: %w", err)
+		}
+		reqBody = bytes.NewReader(data)
+	}
+
+	req, err := http.NewRequest(method, url, reqBody)
+	if err != nil {
+		return nil, fmt.Errorf("creating request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("reading response: %w", err)
+	}
+
+	var apiResp apiResponse
+	if err := json.Unmarshal(respBody, &apiResp); err != nil {
+		return nil, fmt.Errorf("parsing response: %w", err)
+	}
+
+	if apiResp.Type == "error" {
+		return nil, fmt.Errorf("API error: %s", apiResp.Error)
+	}
+
+	return &apiResp, nil
+}
+
+func (c *Client) get(path string) (json.RawMessage, error) {
+	path = strings.TrimPrefix(path, "/1.0")
+	resp, err := c.request("GET", path, nil)
+	if err != nil {
+		return nil, err
+	}
+	if resp.Type != "sync" {
+		return nil, fmt.Errorf("unexpected response type: %s", resp.Type)
+	}
+	return resp.Metadata, nil
+}
+
+func (c *Client) post(path string, body interface{}) (*apiResponse, error) {
+	return c.request("POST", path, body)
+}
+
+func (c *Client) put(path string, body interface{}) (*apiResponse, error) {
+	return c.request("PUT", path, body)
+}
+
+func (c *Client) delete(path string) (*apiResponse, error) {
+	return c.request("DELETE", path, nil)
+}
+
+type Operation struct {
+	ID         string                 `json:"id"`
+	Class      string                 `json:"class"`
+	Status     string                 `json:"status"`
+	StatusCode int                    `json:"status_code"`
+	Metadata   map[string]interface{} `json:"metadata"`
+	Err        string                 `json:"err"`
+	Location   string                 `json:"location"`
+}
+
+func (c *Client) WaitOperation(opURL string) (*Operation, error) {
+	path := strings.TrimPrefix(opURL, "/1.0")
+	body, err := c.request("GET", path+"/wait", nil)
+	if err != nil {
+		return nil, err
+	}
+	var op Operation
+	if err := json.Unmarshal(body.Metadata, &op); err != nil {
+		return nil, fmt.Errorf("parsing operation: %w", err)
+	}
+	if op.Err != "" {
+		return nil, fmt.Errorf("operation failed: %s", op.Err)
+	}
+	return &op, nil
+}
+
+type ServerEnvironment struct {
+	Server         string `json:"server"`
+	ServerVersion  string `json:"server_version"`
+	ServerName     string `json:"server_name"`
+	OSName         string `json:"os_name"`
+	OSVersion      string `json:"os_version"`
+	Kernel         string `json:"kernel"`
+	KernelVersion  string `json:"kernel_version"`
+	Driver         string `json:"driver"`
+	DriverVersion  string `json:"driver_version"`
+	Firewall       string `json:"firewall"`
+	Storage        string `json:"storage"`
+	StorageVersion string `json:"storage_version"`
+}
+
+type ServerInfo struct {
+	APIVersion    string            `json:"api_version"`
+	ServerVersion string            `json:"server_version"`
+	Auth          string            `json:"auth"`
+	AuthMethods   []string          `json:"auth_methods"`
+	APIExtensions []string          `json:"api_extensions"`
+	APIStatus     string            `json:"api_status"`
+	Environment   ServerEnvironment `json:"environment"`
+}
+
+func (c *Client) GetServerInfo() (*ServerInfo, error) {
+	metadata, err := c.get("")
+	if err != nil {
+		return nil, err
+	}
+	var info ServerInfo
+	if err := json.Unmarshal(metadata, &info); err != nil {
+		return nil, fmt.Errorf("parsing server info: %w", err)
+	}
+	return &info, nil
+}
+
+type Instance struct {
+	Name         string            `json:"name"`
+	Status       string            `json:"status"`
+	StatusCode   int               `json:"status_code"`
+	Type         string            `json:"type"`
+	Architecture string            `json:"architecture"`
+	Config       map[string]string `json:"config"`
+	CreatedAt    string            `json:"created_at"`
+	Description  string            `json:"description"`
+	Ephemeral    bool              `json:"ephemeral"`
+	Profiles     []string          `json:"profiles"`
+	Project      string            `json:"project"`
+}
+
+func (c *Client) GetInstance(name string) (*Instance, error) {
+	metadata, err := c.get("/instances/" + name)
+	if err != nil {
+		return nil, err
+	}
+	var detail Instance
+	if err := json.Unmarshal(metadata, &detail); err != nil {
+		return nil, fmt.Errorf("parsing instance detail: %w", err)
+	}
+	return &detail, nil
+}
+
+type InstanceSource struct {
+	Type        string `json:"type"`
+	Alias       string `json:"alias,omitempty"`
+	Fingerprint string `json:"fingerprint,omitempty"`
+	Server      string `json:"server,omitempty"`
+	Protocol    string `json:"protocol,omitempty"`
+}
+
+type InstanceCreateRequest struct {
+	Name       string         `json:"name"`
+	Source     InstanceSource `json:"source"`
+	Ephemeral  bool           `json:"ephemeral"`
+	Config     map[string]string `json:"config,omitempty"`
+	Profiles   []string       `json:"profiles,omitempty"`
+}
+
+type InstanceStatePut struct {
+	Action  string `json:"action"`
+	Timeout int    `json:"timeout,omitempty"`
+}
+
+type ExecPost struct {
+	Command        []string          `json:"command"`
+	Interactive    bool              `json:"interactive"`
+	WaitForWS      bool              `json:"wait-for-websocket"`
+	Environment    map[string]string `json:"environment,omitempty"`
+	User           int               `json:"user,omitempty"`
+	Group          int               `json:"group,omitempty"`
+	Cwd            string            `json:"cwd,omitempty"`
+	RecordOutput   bool              `json:"record-output,omitempty"`
+}
+
+func (c *Client) CreateInstance(req InstanceCreateRequest) (*Operation, error) {
+	resp, err := c.post("/instances", req)
+	if err != nil {
+		return nil, err
+	}
+	if resp.Type == "sync" {
+		return &Operation{Status: "Success"}, nil
+	}
+	return c.WaitOperation(resp.Operation)
+}
+
+func (c *Client) StartInstance(name string) error {
+	_, err := c.put("/instances/"+name+"/state", InstanceStatePut{Action: "start"})
+	return err
+}
+
+func (c *Client) StopInstance(name string, force bool) error {
+	req := InstanceStatePut{Action: "stop"}
+	if force {
+		req.Timeout = 0
+	}
+	_, err := c.put("/instances/"+name+"/state", req)
+	return err
+}
+
+func (c *Client) DeleteInstance(name string) error {
+	resp, err := c.delete("/instances/" + name)
+	if err != nil {
+		return err
+	}
+	if resp.Type == "async" {
+		_, err = c.WaitOperation(resp.Operation)
+	}
+	return err
+}
+
+func (c *Client) ExecInstance(name string, req ExecPost) (*apiResponse, error) {
+	return c.post("/instances/"+name+"/exec", req)
+}
+
+type Image struct {
+	Fingerprint string            `json:"fingerprint"`
+	Aliases     []ImageAlias      `json:"aliases"`
+	Properties  map[string]string `json:"properties"`
+}
+
+type ImageAlias struct {
+	Name string `json:"name"`
+}
+
+func (c *Client) FindImage(name string) (InstanceSource, error) {
+	base := extractImageName(name)
+	localFP, err := c.findLocalImage(base)
+	if err != nil {
+		return InstanceSource{}, err
+	}
+	if localFP != "" {
+		return InstanceSource{Type: "image", Fingerprint: localFP}, nil
+	}
+
+	return InstanceSource{
+		Type:     "image",
+		Alias:    base,
+		Server:   "https://images.linuxcontainers.org",
+		Protocol: "simplestreams",
+	}, nil
+}
+
+func extractImageName(ref string) string {
+	idx := strings.LastIndex(ref, "/")
+	if idx >= 0 {
+		ref = ref[idx+1:]
+	}
+	idx = strings.Index(ref, ":")
+	if idx >= 0 {
+		ref = ref[:idx]
+	}
+	return ref
+}
+
+func (c *Client) findLocalImage(name string) (string, error) {
+	metadata, err := c.get("/images")
+	if err != nil {
+		return "", err
+	}
+
+	var urls []string
+	if err := json.Unmarshal(metadata, &urls); err != nil {
+		return "", fmt.Errorf("parsing image list: %w", err)
+	}
+
+	for _, url := range urls {
+		imgMeta, err := c.get(url)
+		if err != nil {
+			continue
+		}
+		var img Image
+		if err := json.Unmarshal(imgMeta, &img); err != nil {
+			continue
+		}
+		for _, a := range img.Aliases {
+			if a.Name == name {
+				return img.Fingerprint, nil
+			}
+		}
+		if img.Properties != nil {
+			if strings.EqualFold(img.Properties["os"], name) {
+				return img.Fingerprint, nil
+			}
+			if img.Properties["release"] == name {
+				return img.Fingerprint, nil
+			}
+		}
+	}
+
+	return "", nil
+}
+
+func (c *Client) ListContainers() ([]DockerContainer, error) {
+	metadata, err := c.get("/instances")
+	if err != nil {
+		return nil, err
+	}
+
+	var urls []string
+	if err := json.Unmarshal(metadata, &urls); err != nil {
+		return nil, fmt.Errorf("parsing instance list: %w", err)
+	}
+
+	var containers []DockerContainer
+	for _, url := range urls {
+		name := extractName(url)
+		detail, err := c.GetInstance(name)
+		if err != nil {
+			return nil, err
+		}
+		containers = append(containers, DockerContainer{
+			ID:        detail.Name,
+			Names:     []string{detail.Name},
+			Status:    detail.Status,
+			Image:     "",
+			CreatedAt: detail.CreatedAt,
+			Ports:     "",
+			Command:   "",
+		})
+	}
+
+	return containers, nil
+}
+
+func extractName(url string) string {
+	for i := len(url) - 1; i >= 0; i-- {
+		if url[i] == '/' {
+			return url[i+1:]
+		}
+	}
+	return url
+}
