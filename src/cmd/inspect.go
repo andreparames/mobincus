@@ -1,8 +1,6 @@
 package cmd
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -24,10 +22,7 @@ var inspectCmd = &cobra.Command{
 		var results []interface{}
 
 		for _, ref := range args {
-			inst, err := client.GetInstance(ref)
-			if err != nil {
-				inst = resolveByHash(client, ref)
-			}
+			inst := resolveRef(client, ref)
 			if inst == nil {
 				fmt.Println("[]")
 				return &StatusError{
@@ -45,11 +40,6 @@ var inspectCmd = &cobra.Command{
 		fmt.Println(string(out))
 		return nil
 	},
-}
-
-func containerID(name string) string {
-	h := sha256.Sum256([]byte(name))
-	return hex.EncodeToString(h[:])
 }
 
 func dockerTime(t string) string {
@@ -336,22 +326,6 @@ func buildInspectResult(inst *incus.Instance, state *incus.InstanceState) map[st
 		"NetworkSettings": networkSettings,
 		"Mounts":          mounts,
 	}
-}
-
-func resolveByHash(client *incus.Client, hash string) *incus.Instance {
-	containers, err := client.ListContainers()
-	if err != nil {
-		return nil
-	}
-	for _, c := range containers {
-		if containerID(c.ID) == hash {
-			inst, err := client.GetInstance(c.ID)
-			if err == nil {
-				return inst
-			}
-		}
-	}
-	return nil
 }
 
 func init() {

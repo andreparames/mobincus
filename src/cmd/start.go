@@ -17,7 +17,8 @@ var startCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		client := incus.NewClient()
 
-		for _, name := range args {
+		for _, arg := range args {
+			name := resolveName(client, arg)
 			err := client.StartInstance(name)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "error: failed to start container %s: %v\n", name, err)

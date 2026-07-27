@@ -31,8 +31,8 @@ var execCmd = &cobra.Command{
 
 		client := incus.NewClient()
 
-		inst, err := client.GetInstance(containerName)
-		if err != nil {
+		inst := resolveRef(client, containerName)
+		if inst == nil {
 			return fmt.Errorf("error: no such object: %s", containerName)
 		}
 		if inst.Status != "Running" {
@@ -62,7 +62,7 @@ var execCmd = &cobra.Command{
 		stdout = os.Stdout
 		stderr = os.Stderr
 
-		exitCode, execErr := client.ExecAndStream(containerName, incus.ExecPost{
+		exitCode, execErr := client.ExecAndStream(inst.Name, incus.ExecPost{
 			Command:     command,
 			Interactive: execOpts.tty,
 			WaitForWS:   true,

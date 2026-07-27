@@ -19,7 +19,8 @@ var rmCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		client := incus.NewClient()
 
-		for _, name := range args {
+		for _, arg := range args {
+			name := resolveName(client, arg)
 			if rmForce {
 				client.StopInstance(name, true)
 				time.Sleep(200 * time.Millisecond)

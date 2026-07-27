@@ -33,8 +33,10 @@ var cpCmd = &cobra.Command{
 		case srcContainer != "" && dstContainer != "":
 			return fmt.Errorf("copying between containers is not supported")
 		case srcContainer != "":
+			srcContainer = resolveName(client, srcContainer)
 			return copyFromContainer(client, srcContainer, srcPath, dst)
 		case dstContainer != "":
+			dstContainer = resolveName(client, dstContainer)
 			return copyToContainer(client, dstContainer, dstPath, src)
 		default:
 			return fmt.Errorf("must specify at least one container source")
