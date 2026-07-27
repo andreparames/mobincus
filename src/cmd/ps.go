@@ -30,11 +30,7 @@ var psCmd = &cobra.Command{
 
 		if psQuiet {
 			for _, c := range filtered {
-				id := c.ID
-				if len(id) > 12 {
-					id = id[:12]
-				}
-				fmt.Println(id)
+				fmt.Println(c.ID)
 			}
 		} else {
 			output := docker.FormatContainerList(filtered)
