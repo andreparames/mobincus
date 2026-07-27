@@ -14,13 +14,9 @@ func FormatContainerList(containers []incus.DockerContainer) string {
 	var b strings.Builder
 	b.WriteString("CONTAINER ID   IMAGE     COMMAND   CREATED   STATUS   PORTS     NAMES\n")
 	for _, c := range containers {
-		id := c.ID
-		if len(id) > 12 {
-			id = id[:12]
-		}
 		status := c.Status
 		names := strings.Join(c.Names, ", ")
-		b.WriteString(fmt.Sprintf("%-14s %-9s %-9s %-8s %-8s %-9s %s\n", id, "", "", "", status, "", names))
+		b.WriteString(fmt.Sprintf("%-14s %-9s %-9s %-8s %-8s %-9s %s\n", c.ID, "", "", "", status, "", names))
 	}
 	return b.String()
 }
