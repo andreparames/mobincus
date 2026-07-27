@@ -120,11 +120,17 @@ mobincus/
 - [x] `TestRunAttach` (stdin, stdout, stderr) passes
 - [x] `TestRunInvalidEntrypointWithAutoremove` passes
 - [x] `TestProcessTermination` (signal forwarding via control WebSocket) passes
+- [x] `docker create` command
+- [x] `docker start` command
+- [x] `docker rm` command (with `-f` force)
+- [x] `docker wait` command
+- [x] `docker run -d` detached mode
 
 ## Next steps (in rough order)
 
 - [ ] `--version` / `-v` flags on root command
 - [ ] `-H` / `--host` / `DOCKER_HOST` flag support
 - [ ] `docker container ls` — alias for `docker ps`
+- [ ] `docker cp` implementation
 - [ ] `docker inspect` JSON output for real containers
 - [ ] Run more e2e tests: `TestTCPSchemeUsesHTTPProxyEnv`, `TestCliPluginsVersion`, `TestGlobalArgsOnlyParsedOnce`

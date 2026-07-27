@@ -1,8 +1,6 @@
 package cmd
 
 import (
-	"crypto/rand"
-	"encoding/hex"
 	"fmt"
 	"io"
 	"os"
@@ -14,9 +12,10 @@ import (
 )
 
 type runOptions struct {
-	attach []string
-	rm     bool
+	attach      []string
+	rm          bool
 	interactive bool
+	detach      bool
 }
 
 var runOpts runOptions
@@ -57,6 +56,12 @@ var runCmd = &cobra.Command{
 			}
 		}
 
+		if runOpts.detach {
+			attachStdin = false
+			attachStdout = false
+			attachStderr = false
+		}
+
 		client := incus.NewClient()
 
 		source, err := client.FindImage(imageName)
@@ -86,53 +91,60 @@ var runCmd = &cobra.Command{
 			return fmt.Errorf("waiting for instance to start: %w", err)
 		}
 
-		var stdin io.Reader
-		var stdout, stderr io.Writer
-
-		if attachStdin {
-			stdin = os.Stdin
-		}
-		if attachStdout {
-			stdout = os.Stdout
-		}
-		if attachStderr {
-			stderr = os.Stderr
-		}
-
-		interactive := false
-		exitCode, execErr := client.ExecAndStream(name, incus.ExecPost{
-			Command:     command,
-			Interactive: interactive,
-			WaitForWS:   true,
-		}, stdin, stdout, stderr)
-
-		if runOpts.rm {
+		if runOpts.detach {
+			client.SetConfig(name, "user.docker_cmd", joinCommand(command))
+			exitCode, execErr := client.ExecAndStream(name, incus.ExecPost{
+				Command:   command,
+				WaitForWS: true,
+			}, nil, nil, nil)
+			if execErr != nil {
+				client.SetConfig(name, "user.docker_exit_code", "-1")
+			} else {
+				client.SetConfig(name, "user.docker_exit_code", fmt.Sprintf("%d", exitCode))
+			}
 			client.StopInstance(name, true)
-			for i := 0; i < 5; i++ {
-				time.Sleep(200 * time.Millisecond)
-				err := client.DeleteInstance(name)
-				if err == nil {
-					break
+			fmt.Println(name)
+		} else {
+			var stdin io.Reader
+			var stdout, stderr io.Writer
+
+			if attachStdin {
+				stdin = os.Stdin
+			}
+			if attachStdout {
+				stdout = os.Stdout
+			}
+			if attachStderr {
+				stderr = os.Stderr
+			}
+
+			exitCode, execErr := client.ExecAndStream(name, incus.ExecPost{
+				Command:   command,
+				WaitForWS: true,
+			}, stdin, stdout, stderr)
+
+			if runOpts.rm {
+				client.StopInstance(name, true)
+				for i := 0; i < 5; i++ {
+					time.Sleep(200 * time.Millisecond)
+					err := client.DeleteInstance(name)
+					if err == nil {
+						break
+					}
 				}
 			}
-		}
 
-		if execErr != nil {
-			return execErr
-		}
+			if execErr != nil {
+				return execErr
+			}
 
-		if exitCode != 0 {
-			os.Exit(exitCode)
+			if exitCode != 0 {
+				os.Exit(exitCode)
+			}
 		}
 
 		return nil
 	},
-}
-
-func generateName() string {
-	b := make([]byte, 8)
-	rand.Read(b)
-	return "mobincus-" + hex.EncodeToString(b)
 }
 
 func waitStopped(client *incus.Client, name string, timeout time.Duration) {
@@ -165,6 +177,7 @@ func init() {
 	runCmd.Flags().StringArrayVarP(&runOpts.attach, "attach", "a", nil, "Attach to STDIN, STDOUT or STDERR")
 	runCmd.Flags().BoolVarP(&runOpts.rm, "rm", "", false, "Automatically remove the container when it exits")
 	runCmd.Flags().BoolVarP(&runOpts.interactive, "interactive", "i", false, "Keep STDIN open even if not attached")
+	runCmd.Flags().BoolVarP(&runOpts.detach, "detach", "d", false, "Run container in background and print container ID")
 	runCmd.Flags().SetInterspersed(false)
 	rootCmd.AddCommand(runCmd)
 }

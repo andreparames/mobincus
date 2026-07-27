@@ -1,3 +1,6 @@
 [submodule "docker-cli"]
 	path = docker-cli
 	url = https://github.com/docker/cli.git
+[submodule "moby"]
+	path = moby
+	url = https://github.com/moby/moby.git

@@ -245,7 +245,13 @@ func (c *Client) CreateInstance(req InstanceCreateRequest) (*Operation, error) {
 }
 
 func (c *Client) StartInstance(name string) error {
-	_, err := c.put("/instances/"+name+"/state", InstanceStatePut{Action: "start"})
+	resp, err := c.put("/instances/"+name+"/state", InstanceStatePut{Action: "start"})
+	if err != nil {
+		return err
+	}
+	if resp.Type == "async" {
+		_, err = c.WaitOperation(resp.Operation)
+	}
 	return err
 }
 
@@ -254,7 +260,13 @@ func (c *Client) StopInstance(name string, force bool) error {
 	if force {
 		req.Timeout = 0
 	}
-	_, err := c.put("/instances/"+name+"/state", req)
+	resp, err := c.put("/instances/"+name+"/state", req)
+	if err != nil {
+		return err
+	}
+	if resp.Type == "async" {
+		_, err = c.WaitOperation(resp.Operation)
+	}
 	return err
 }
 
@@ -381,6 +393,56 @@ func (c *Client) ListContainers() ([]DockerContainer, error) {
 	}
 
 	return containers, nil
+}
+
+func (c *Client) SetConfig(name, key, value string) error {
+	inst, err := c.GetInstance(name)
+	if err != nil {
+		return err
+	}
+
+	if inst.Config == nil {
+		inst.Config = make(map[string]string)
+	}
+	inst.Config[key] = value
+
+	resp, err := c.put("/instances/"+name, map[string]interface{}{
+		"config":      inst.Config,
+		"description": inst.Description,
+		"ephemeral":   inst.Ephemeral,
+		"profiles":    inst.Profiles,
+		"devices":     map[string]interface{}{},
+	})
+	if err != nil {
+		return err
+	}
+	if resp.Type == "async" {
+		_, err = c.WaitOperation(resp.Operation)
+	}
+	return err
+}
+
+func (c *Client) GetConfig(name, key string) (string, error) {
+	inst, err := c.GetInstance(name)
+	if err != nil {
+		return "", err
+	}
+	return inst.Config[key], nil
+}
+
+func (c *Client) WaitInstanceStopped(name string, timeout time.Duration) (string, error) {
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		inst, err := c.GetInstance(name)
+		if err != nil {
+			return "", err
+		}
+		if inst.Status == "Stopped" {
+			return c.GetConfig(name, "user.docker_exit_code")
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	return "", fmt.Errorf("timed out waiting for instance %s to stop", name)
 }
 
 func extractName(url string) string {
