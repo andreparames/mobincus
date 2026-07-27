@@ -62,8 +62,8 @@ func dockerTime(t string) string {
 
 func buildInspectResult(inst *incus.Instance, state *incus.InstanceState) map[string]interface{} {
 	id := containerID(inst.Name)
-	status := inst.Status
-	running := status == "Running"
+	status := strings.ToLower(inst.Status)
+	running := inst.Status == "Running"
 
 	startedAt := ""
 	finishedAt := "0001-01-01T00:00:00Z"
@@ -89,8 +89,8 @@ func buildInspectResult(inst *incus.Instance, state *incus.InstanceState) map[st
 			envVars = append(envVars, k[12:]+"="+v)
 		}
 	}
-	if envVars == nil {
-		envVars = []string{}
+	if len(envVars) == 0 {
+		envVars = []string{"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"}
 	}
 
 	var mounts []map[string]interface{}
@@ -158,7 +158,11 @@ func buildInspectResult(inst *incus.Instance, state *incus.InstanceState) map[st
 					macAddress = iface.Hwaddr
 				}
 			}
-			networks[ifName] = netEntry
+			if ifName == "eth0" {
+				networks["bridge"] = netEntry
+			} else {
+				networks[ifName] = netEntry
+			}
 		}
 	}
 
