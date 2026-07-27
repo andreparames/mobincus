@@ -14,7 +14,18 @@ var (
 	psQuiet   bool
 	psAll     bool
 	psFilters []string
+	psFormat  string
 )
+
+type psRow struct {
+	ID     string            `json:"ID"`
+	Names  string            `json:"Names"`
+	Image  string            `json:"Image"`
+	State  string            `json:"State"`
+	Status string            `json:"Status"`
+	Ports  string            `json:"Ports"`
+	Labels map[string]string `json:"Labels,omitempty"`
+}
 
 var psCmd = &cobra.Command{
 	Use:   "ps",
@@ -27,6 +38,30 @@ var psCmd = &cobra.Command{
 		}
 
 		filtered := filterContainers(containers)
+
+		if psFormat != "" {
+			for _, c := range filtered {
+			labels := make(map[string]string)
+			for k, v := range c.Config {
+				labels[strings.TrimPrefix(k, "user.")] = v
+			}
+			row := psRow{
+				ID:     c.ID,
+				Names:  strings.Join(c.Names, ","),
+				Image:  "",
+				State:  strings.ToLower(c.Status),
+				Status: c.Status,
+				Ports:  "",
+				Labels: labels,
+			}
+				out, err := docker.TemplateOutput(psFormat, row)
+				if err != nil {
+					return fmt.Errorf("template error: %w", err)
+				}
+				fmt.Println(out)
+			}
+			return nil
+		}
 
 		if psQuiet {
 			for _, c := range filtered {
@@ -80,5 +115,6 @@ func init() {
 	psCmd.Flags().BoolVarP(&psQuiet, "quiet", "q", false, "Only display container IDs")
 	psCmd.Flags().BoolVarP(&psAll, "all", "a", false, "Show all containers (default shows running)")
 	psCmd.Flags().StringArrayVarP(&psFilters, "filter", "f", nil, "Filter output based on conditions provided")
+	psCmd.Flags().StringVarP(&psFormat, "format", "", "", "Format output using a custom template")
 	rootCmd.AddCommand(psCmd)
 }
