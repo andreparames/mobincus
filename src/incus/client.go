@@ -179,17 +179,53 @@ func (c *Client) GetServerInfo() (*ServerInfo, error) {
 }
 
 type Instance struct {
-	Name         string            `json:"name"`
-	Status       string            `json:"status"`
-	StatusCode   int               `json:"status_code"`
-	Type         string            `json:"type"`
-	Architecture string            `json:"architecture"`
-	Config       map[string]string `json:"config"`
-	CreatedAt    string            `json:"created_at"`
-	Description  string            `json:"description"`
-	Ephemeral    bool              `json:"ephemeral"`
-	Profiles     []string          `json:"profiles"`
-	Project      string            `json:"project"`
+	Name            string                       `json:"name"`
+	Status          string                       `json:"status"`
+	StatusCode      int                          `json:"status_code"`
+	Type            string                       `json:"type"`
+	Architecture    string                       `json:"architecture"`
+	Config          map[string]string            `json:"config"`
+	CreatedAt       string                       `json:"created_at"`
+	Description     string                       `json:"description"`
+	Ephemeral       bool                         `json:"ephemeral"`
+	Profiles        []string                     `json:"profiles"`
+	Project         string                       `json:"project"`
+	ExpandedDevices map[string]json.RawMessage    `json:"expanded_devices,omitempty"`
+}
+
+type InstanceState struct {
+	Status    string `json:"status"`
+	StatusCode int   `json:"status_code"`
+	StartedAt string `json:"started_at"`
+	PID       int    `json:"pid"`
+	Processes int    `json:"processes"`
+	Network   map[string]InstanceStateNetwork `json:"network"`
+}
+
+type InstanceStateNetwork struct {
+	Addresses []InstanceStateAddress `json:"addresses"`
+	Hwaddr    string                 `json:"hwaddr"`
+	State     string                 `json:"state"`
+	Type      string                 `json:"type"`
+}
+
+type InstanceStateAddress struct {
+	Family  string `json:"family"`
+	Address string `json:"address"`
+	Netmask string `json:"netmask"`
+	Scope   string `json:"scope"`
+}
+
+func (c *Client) GetInstanceState(name string) (*InstanceState, error) {
+	metadata, err := c.get("/instances/" + name + "/state")
+	if err != nil {
+		return nil, err
+	}
+	var state InstanceState
+	if err := json.Unmarshal(metadata, &state); err != nil {
+		return nil, fmt.Errorf("parsing instance state: %w", err)
+	}
+	return &state, nil
 }
 
 func (c *Client) GetInstance(name string) (*Instance, error) {
