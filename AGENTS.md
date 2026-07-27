@@ -130,6 +130,7 @@ mobincus/
 - [x] `docker rm` command (with `-f` force)
 - [x] `docker wait` command
 - [x] `docker cp` implementation (file API, recursive dirs, tar stdout, follow-link)
+- [x] `version --format` with Go template `json` function support
 
 ## Next steps (in rough order)
 

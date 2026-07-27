@@ -2,6 +2,7 @@ package docker
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"text/template"
@@ -25,7 +26,16 @@ func FormatContainerList(containers []incus.DockerContainer) string {
 }
 
 func TemplateOutput(tmplStr string, data interface{}) (string, error) {
-	tmpl, err := template.New("").Parse(tmplStr)
+	funcMap := template.FuncMap{
+		"json": func(v interface{}) string {
+			b, err := json.Marshal(v)
+			if err != nil {
+				return fmt.Sprintf("<error: %v>", err)
+			}
+			return string(b)
+		},
+	}
+	tmpl, err := template.New("").Funcs(funcMap).Parse(tmplStr)
 	if err != nil {
 		return "", fmt.Errorf("template parsing error: %w", err)
 	}
