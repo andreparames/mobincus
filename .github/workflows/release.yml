@@ -23,7 +23,7 @@ jobs:
           CURRENT=$(sed -n 's/^\s*Version\s*=\s*"\(.*\)".*/\1/p' src/incus/client.go)
           IFS=. read -r MAJOR MINOR PATCH <<< "$CURRENT"
           NEW="$MAJOR.$MINOR.$((PATCH + 1))"
-          sed -i "s/Version = \"$CURRENT\"/Version = \"$NEW\"/" src/incus/client.go
+          sed -i "s/[0-9]\+\.[0-9]\+\.[0-9]\+/$NEW/" src/incus/client.go
           echo "new=$NEW" >> "$GITHUB_OUTPUT"
 
       - name: Commit and tag
