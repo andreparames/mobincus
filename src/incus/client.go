@@ -213,11 +213,19 @@ type InstanceSource struct {
 }
 
 type InstanceCreateRequest struct {
-	Name       string         `json:"name"`
-	Source     InstanceSource `json:"source"`
-	Ephemeral  bool           `json:"ephemeral"`
-	Config     map[string]string `json:"config,omitempty"`
-	Profiles   []string       `json:"profiles,omitempty"`
+	Name       string                 `json:"name"`
+	Source     InstanceSource         `json:"source"`
+	Ephemeral  bool                   `json:"ephemeral"`
+	Config     map[string]string      `json:"config,omitempty"`
+	Profiles   []string               `json:"profiles,omitempty"`
+	Devices    map[string]interface{} `json:"devices,omitempty"`
+}
+
+type DiskDevice struct {
+	Type   string `json:"type"`
+	Pool   string `json:"pool"`
+	Source string `json:"source"`
+	Path   string `json:"path"`
 }
 
 type InstanceStatePut struct {
@@ -275,6 +283,50 @@ func (c *Client) StopInstance(name string, force bool) error {
 
 func (c *Client) DeleteInstance(name string) error {
 	resp, err := c.delete("/instances/" + name)
+	if err != nil {
+		return err
+	}
+	if resp.Type == "async" {
+		_, err = c.WaitOperation(resp.Operation)
+	}
+	return err
+}
+
+type CustomVolume struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	ContentType string `json:"content_type"`
+	Config      map[string]string `json:"config"`
+	UsedBy      []string `json:"used_by"`
+	Location    string `json:"location"`
+	Project     string `json:"project"`
+}
+
+func (c *Client) CreateVolume(name string) error {
+	resp, err := c.post("/storage-pools/default/volumes/custom", map[string]string{"name": name})
+	if err != nil {
+		return err
+	}
+	if resp.Type == "async" {
+		_, err = c.WaitOperation(resp.Operation)
+	}
+	return err
+}
+
+func (c *Client) ListVolumes() ([]string, error) {
+	raw, err := c.get("/storage-pools/default/volumes/custom")
+	if err != nil {
+		return nil, err
+	}
+	var urls []string
+	if err := json.Unmarshal(raw, &urls); err != nil {
+		return nil, fmt.Errorf("parsing volume list: %w", err)
+	}
+	return urls, nil
+}
+
+func (c *Client) DeleteVolume(name string) error {
+	resp, err := c.delete("/storage-pools/default/volumes/custom/" + name)
 	if err != nil {
 		return err
 	}

@@ -18,6 +18,7 @@ type runOptions struct {
 	interactive bool
 	detach      bool
 	labels      []string
+	volumes     []string
 }
 
 var runOpts runOptions
@@ -84,10 +85,39 @@ var runCmd = &cobra.Command{
 			}
 		}
 
+		devices := make(map[string]interface{})
+		for _, v := range runOpts.volumes {
+			parts := strings.SplitN(v, ":", 2)
+			if len(parts) == 2 {
+				volName := parts[0]
+				containerPath := parts[1]
+
+				vols, _ := client.ListVolumes()
+				found := false
+				for _, u := range vols {
+					if extractName(u) == volName {
+						found = true
+						break
+					}
+				}
+				if !found {
+					client.CreateVolume(volName)
+				}
+
+				devices[volName] = incus.DiskDevice{
+					Type:   "disk",
+					Pool:   "default",
+					Source: volName,
+					Path:   containerPath,
+				}
+			}
+		}
+
 		_, err = client.CreateInstance(incus.InstanceCreateRequest{
 			Name:       name,
 			Source:     source,
 			Config:     labels,
+			Devices:    devices,
 			Ephemeral:  false,
 			Profiles:   []string{"default"},
 		})
@@ -193,6 +223,7 @@ func init() {
 	runCmd.Flags().BoolVarP(&runOpts.interactive, "interactive", "i", false, "Keep STDIN open even if not attached")
 	runCmd.Flags().BoolVarP(&runOpts.detach, "detach", "d", false, "Run container in background and print container ID")
 	runCmd.Flags().StringArrayVarP(&runOpts.labels, "label", "l", nil, "Set metadata on container")
+	runCmd.Flags().StringArrayVarP(&runOpts.volumes, "volume", "v", nil, "Bind mount a volume")
 	runCmd.Flags().SetInterspersed(false)
 	rootCmd.AddCommand(runCmd)
 }

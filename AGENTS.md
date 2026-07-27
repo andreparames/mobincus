@@ -134,6 +134,8 @@ mobincus/
 - [x] `--label` flag on `run` and `create` (maps to `user.*` config keys on Instance)
 - [x] `docker ps -q` (quiet, IDs only)
 - [x] `docker ps --filter label=key=value` (client-side filtering by config)
+- [x] `docker volume create` / `ls` / `rm` commands
+- [x] `docker run -v` volume mounting (auto-creates volumes)
 
 ## Next steps (in rough order)
 
