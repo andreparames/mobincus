@@ -47,7 +47,11 @@ func splitCpRef(ref string) (container, path string) {
 		return "", ref
 	}
 	idx := strings.Index(ref, ":")
-	return ref[:idx], ref[idx+1:]
+	possibleContainer := ref[:idx]
+	if possibleContainer == "" || possibleContainer[0] == '/' || possibleContainer[0] == '~' || possibleContainer[0] == '.' {
+		return "", ref
+	}
+	return possibleContainer, ref[idx+1:]
 }
 
 func copyFromContainer(client *incus.Client, container, srcPath, dstPath string) error {
