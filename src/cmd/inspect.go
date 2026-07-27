@@ -26,6 +26,9 @@ var inspectCmd = &cobra.Command{
 		for _, ref := range args {
 			inst, err := client.GetInstance(ref)
 			if err != nil {
+				inst = resolveByHash(client, ref)
+			}
+			if inst == nil {
 				fmt.Println("[]")
 				return &StatusError{
 					StatusCode: 1,
@@ -333,6 +336,22 @@ func buildInspectResult(inst *incus.Instance, state *incus.InstanceState) map[st
 		"NetworkSettings": networkSettings,
 		"Mounts":          mounts,
 	}
+}
+
+func resolveByHash(client *incus.Client, hash string) *incus.Instance {
+	containers, err := client.ListContainers()
+	if err != nil {
+		return nil
+	}
+	for _, c := range containers {
+		if containerID(c.ID) == hash {
+			inst, err := client.GetInstance(c.ID)
+			if err == nil {
+				return inst
+			}
+		}
+	}
+	return nil
 }
 
 func init() {
